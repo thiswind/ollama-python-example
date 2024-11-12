@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Chat{% endblock %}
+
+{% block content %}
+<h2 class="text-center">Chatbot</h2>
+<div class="mb-3">
+    <label for="userMessage" class="form-label">Your Message:</label>
+    <input type="text" class="form-control" id="userMessage" placeholder="Type your message...">
+</div>
+<button class="btn btn-primary" onclick="sendMessage()">Send</button>
+<div class="mt-3">
+    <h5>Chat History:</h5>
+    <ul id="chatHistory" class="list-group"></ul>
+</div>
+<a href="{{ url_for('logout') }}" class="btn btn-secondary mt-3">Logout</a>
+
+<script>
+    function sendMessage() {
+        const userMessage = document.getElementById('userMessage').value;
+        if (!userMessage) return;
+
+        fetch('/chat_api', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({message: userMessage})
+        })
+        .then(response => response.json())
+        .then(data => {
+            const chatHistory = document.getElementById('chatHistory');
+            const userItem = document.createElement('li');
+            userItem.classList.add('list-group-item');
+            userItem.textContent = 'You: ' + userMessage;
+            chatHistory.appendChild(userItem);
+
+            const botItem = document.createElement('li');
+            botItem.classList.add('list-group-item');
+            botItem.textContent = 'Bot: ' + data.reply;
+            chatHistory.appendChild(botItem);
+
+            document.getElementById('userMessage').value = '';
+        })
+        .catch(error => console.error('Error:', error));
+    }
+</script>
+{% endblock %}
