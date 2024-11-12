@@ -1,141 +1,179 @@
-# 使用 Ollama 和 Flask 的简单 Chatbot 项目
 
-## 项目简介
 
-本项目展示了如何通过 Flask 和 Ollama 创建一个带有登录功能的简单聊天应用程序，同时还包括两个直接调用 Ollama 模型的独立示例：一个是 **直接输出**，另一个是 **流式输出**。通过这些示例，您可以学习如何使用 AI 模型生成代码并集成在 Python 程序中，体验不同的输出方式对应用的影响。
+# Ollama Python Example - Scratch 功能升级指南
 
----
+本次更新在 Ollama Python Example 项目中新增了一个功能页面 `Scratch`，该功能可以自动从输入的网页中提取主要内容并生成总结。这是一个方便的网页内容提取和快速阅读工具，用户可通过输入 URL 获取网页的核心信息和总结。
 
-## 目录
-
-1. [项目结构](#项目结构)
-2. [安装前提](#安装前提)
-3. [构建步骤](#构建步骤)
-4. [运行应用](#运行应用)
-5. [三种示例的功能说明](#三种示例的功能说明)
-   - Flask 应用
-   - 直接输出示例
-   - 流式输出示例
-6. [参考资源](#参考资源)
+本指南将指导您在现有项目的基础上，添加和配置新的 `Scratch` 功能。
 
 ---
 
-## 项目结构
+## 1. 安装新依赖
 
-最终项目文件夹结构如下：
+请确保您已在项目根目录下的虚拟环境中，并使用以下命令安装 `Scratch` 功能所需的额外依赖：
 
-```
-ollama-chatbot/
-│
-├── chatbot.py                  # 主 Flask 应用，包含登录和聊天功能
-├── hello_ollama.py             # 简单的 Ollama 调用示例
-├── hello_ollama_stream.py      # 使用流式响应的 Ollama 调用示例
-├── requirements.txt            # Python 依赖包
-└── templates/                  # HTML 模板文件夹
-    ├── base.html               # 基础模板，供其他页面继承
-    ├── login.html              # 登录页面
-    └── chat.html               # 聊天页面
+```bash
+pip install -r requirements.txt
 ```
 
-## 安装前提
+确认 `requirements.txt` 包含以下内容：
 
-- **Ollama**：请确保您在本地安装了 Ollama，具体安装方法见 [Ollama 官方网站](https://ollama.com/)。
-- **Python 3.7+**：项目使用 Python 3 及 Flask 框架。
-
----
-
-## 构建步骤
-
-> 请按照以下步骤逐步在本地搭建项目。
-
-1. **创建项目文件夹**：在计算机上新建一个文件夹，命名为 `ollama-chatbot`。
-2. **创建并填写 `requirements.txt`**：在 `ollama-chatbot` 文件夹中创建 `requirements.txt`，并添加所需依赖。
-3. **创建 Flask 应用的主文件**：在 `ollama-chatbot` 文件夹中创建 `chatbot.py`，粘贴 Flask 应用代码。
-4. **创建 Ollama 调用示例文件**：分别创建 `hello_ollama.py` 和 `hello_ollama_stream.py` 文件，粘贴相应的代码。
-5. **创建 `templates` 文件夹和 HTML 模板**：在 `ollama-chatbot` 文件夹中创建 `templates` 子文件夹，并添加 HTML 文件。
-
-请参考上方详细的文件和代码示例，逐步复制并粘贴代码到相应文件中。
+```plaintext
+ollama
+flask
+requests
+readability-lxml
+lxml
+```
 
 ---
 
-## 运行应用
+## 2. 覆盖源文件
 
-1. **安装依赖**：在项目根目录下运行以下命令安装所需依赖：
-   ```bash
-   pip install -r requirements.txt
+请依次找到以下源文件，并按照下面的步骤覆盖原文件内容，以完成新功能的添加。
+
+### 2.1 覆盖 `chatbot.py`
+
+1. 打开项目中的 `chatbot.py` 文件。
+2. 将以下代码粘贴到 `chatbot.py` 中，完全覆盖原有内容：
+
+   ```python
+   from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+   import ollama
+   import requests
+   from readability import Document
+   from lxml import html
+
+   app = Flask(__name__)
+   app.secret_key = 'your_secret_key'
+
+   # 硬编码的用户名和密码
+   USERNAME = 'admin'
+   PASSWORD = 'password123'
+
+   # 登录页面
+   @app.route('/', methods=['GET', 'POST'])
+   def login():
+       if request.method == 'POST':
+           username = request.form.get('username')
+           password = request.form.get('password')
+           if username == USERNAME and password == PASSWORD:
+               session['logged_in'] = True
+               return redirect(url_for('chat'))
+           else:
+               error = "Invalid credentials. Please try again."
+               return render_template('login.html', error=error)
+       return render_template('login.html')
+
+   # 聊天页面
+   @app.route('/chat', methods=['GET', 'POST'])
+   def chat():
+       if not session.get('logged_in'):
+           return redirect(url_for('login'))
+       return render_template('chat.html')
+
+   # 处理聊天的API
+   @app.route('/chat_api', methods=['POST'])
+   def chat_api():
+       if not session.get('logged_in'):
+           return jsonify({"error": "Unauthorized"}), 401
+       
+       user_message = request.json.get('message', '')
+       if not user_message:
+           return jsonify({"error": "No message provided"}), 400
+
+       response = ollama.chat(model='llama3.2', messages=[{"role": "user", "content": user_message}])
+       bot_reply = response['message']['content']
+       
+       return jsonify({"reply": bot_reply})
+
+   # 爬取页面
+   @app.route('/scratch', methods=['GET', 'POST'])
+   def scratch():
+       if not session.get('logged_in'):
+           return redirect(url_for('login'))
+       
+       if request.method == 'POST':
+           url = request.form.get('url')
+           try:
+               # 获取网页内容
+               response = requests.get(url)
+               response.raise_for_status()
+               response.encoding = response.apparent_encoding
+               html_content = response.text
+
+               # 使用 Readability 提取主要内容的 HTML
+               doc = Document(html_content)
+               main_content_html = doc.summary()  # 获取主要内容的 HTML
+
+               # 使用 lxml 提取纯文本
+               main_content_element = html.fromstring(main_content_html)
+               main_content_text = main_content_element.text_content().strip()  # 提取纯文本并去除首尾空白
+
+               # 使用 Ollama 模型生成总结
+               summary_prompt = (
+                   f"请对以下新闻内容进行总结，包含：1) 提纲要点 2) 中心思想：\n{main_content_text}"
+               )
+               summary_response = ollama.chat(model='llama3.2', messages=[{"role": "user", "content": summary_prompt}])
+               summary = summary_response[0]['content'] if isinstance(summary_response, list) else summary_response['message']['content']
+
+               return render_template('scratch.html', url=url, main_content=main_content_text, summary=summary)
+           
+           except requests.RequestException:
+               error = "无法访问该 URL，请检查链接是否正确。"
+               return render_template('scratch.html', error=error)
+
+       return render_template('scratch.html')
+
+   # 登出功能
+   @app.route('/logout')
+   def logout():
+       session.pop('logged_in', None)
+       return redirect(url_for('login'))
+
+   if __name__ == '__main__':
+       app.run(port=5000)
    ```
 
-2. **启动应用**：运行以下命令启动 Flask 应用：
-   ```bash
-   python chatbot.py
-   ```
+---
 
-3. **访问应用**：在浏览器中打开 [http://127.0.0.1:5000](http://127.0.0.1:5000)，并使用用户名 `admin` 和密码 `password123` 登录，进入聊天页面。
+## 3. 创建新模板文件
+
+在 `templates` 文件夹下，创建一个名为 `scratch.html` 的新文件。然后将以下代码粘贴到该文件中，确保它与项目的其他模板文件位于同一目录下：
+
+```html
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Scratch 页面</h2>
+    <form method="post" action="{{ url_for('scratch') }}">
+        <div class="form-group">
+            <label for="url">输入 URL：</label>
+            <input type="text" name="url" class="form-control" id="url" placeholder="输入要爬取的网页 URL" required>
+        </div>
+        <button type="submit" class="btn btn-primary">提交</button>
+    </form>
+    {% if main_content and summary %}
+    <hr>
+    <h3>主要内容</h3>
+    <p>{{ main_content }}</p>
+    <hr>
+    <h3>总结</h3>
+    <p>{{ summary }}</p>
+    {% endif %}
+</div>
+{% endblock %}
+```
 
 ---
 
-## 三种示例的功能说明
+## 4. 启动并测试 `Scratch` 功能
 
-### 1. Flask 应用：带有登录和聊天功能的 Web 应用
+完成上述步骤后，在项目根目录中启动应用，确保一切配置正常：
 
-- **文件**：`chatbot.py`
-- **描述**：这是一个基于 Flask 的 Web 应用，包含登录、聊天和登出功能。用户登录后可以访问聊天页面，通过与 Ollama 模型交互获得 AI 的回复。
-- **用途**：展示了如何结合 Web 界面、会话管理和 Ollama AI 模型构建一个基础的聊天应用。
+```bash
+python chatbot.py
+```
 
-### 2. 直接输出示例：`hello_ollama.py`
-
-- **文件**：`hello_ollama.py`
-- **描述**：此脚本直接调用 Ollama 模型，发送一个问题并立即返回完整的回答。
-- **示例代码**：
-  ```python
-  import ollama
-
-  response = ollama.chat(model='llama3.2', messages=[
-    {
-      'role': 'user',
-      'content': 'Why is the sky blue?',
-    },
-  ])
-  print(response['message']['content'])
-  ```
-- **输出方式**：**直接输出**，即一次性输出整个回复。
-- **适用场景**：直接输出适合处理较短的回答或简单的查询。这种方式更高效，因为它不会逐步输出，直接返回完整的响应。
-
-### 3. 流式输出示例：`hello_ollama_stream.py`
-
-- **文件**：`hello_ollama_stream.py`
-- **描述**：此脚本使用流式响应模式（streaming）调用 Ollama 模型，逐块输出回复内容。
-- **示例代码**：
-  ```python
-  import ollama
-
-  stream = ollama.chat(
-      model='llama3.2',
-      messages=[{'role': 'user', 'content': 'Why is the sky blue?'}],
-      stream=True,
-  )
-
-  for chunk in stream:
-    print(chunk['message']['content'], end='', flush=True)
-  ```
-- **输出方式**：**流式输出**，即按数据块逐步输出内容，模拟实时响应。
-- **适用场景**：流式输出适用于处理较长的回答或需要实时更新的情况。例如，当生成内容较长时，流式输出可以边生成边显示，让用户不必等待整个内容生成完毕，从而获得更好的交互体验。
-
-### 为什么需要两种输出方式？
-
-1. **直接输出**：
-   - 更高效，适合生成短回答。
-   - 由于不涉及分块输出，因此不适合处理需要逐步展示的长文本。
-   - 适合简单的 API 请求或快速反馈的场景。
-
-2. **流式输出**：
-   - 适合较长或复杂的回答，可以边生成边展示，减少用户等待时间。
-   - 尤其适合需要实时响应的场景，比如回答较长的问答或逐句生成内容。
-   - 提供更自然的用户体验，让用户感觉内容是在动态生成的。
-
----
-
-## 参考资源
-
-- [Ollama 官方网站](https://ollama.com/)
-- [Flask 官方文档](https://flask.palletsprojects.com/)
+打开浏览器，访问 `http://127.0.0.1:5000/scratch`。在页面中输入任意有效的网页 URL，测试 `Scratch` 功能是否正常运行。此功能会提取网页的主要内容并生成总结。
