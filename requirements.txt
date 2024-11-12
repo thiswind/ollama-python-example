@@ -1,2 +1,6 @@
 ollama
 flask
+requests
+readability-lxml
+lxml
+lxml_html_clean  # 或者 lxml[html_clean]
